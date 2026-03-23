@@ -42,9 +42,11 @@ function App() {
   };
 
 useEffect(() => {
-  auth.onAuthStateChanged((user) => {
+  const unsubscribe = auth.onAuthStateChanged((user) => {
     // alguma coisa
   });
+
+  return () => unsubscribe();
 }, [auth]);
 
   // 🔄 carregar exames
