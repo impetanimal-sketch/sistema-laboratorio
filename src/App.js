@@ -1,30 +1,29 @@
-import { useState, useEffect } from "react";
-import { db, auth } from "./firebase";
-import {
-  collection,
-  addDoc,
-  getDocs,
-  deleteDoc,
-  doc,
-} from "firebase/firestore";
+import { useEffect, useState } from "react";
+import { auth, db } from "./firebase";
 import {
   signInWithEmailAndPassword,
   signOut,
-  onAuthStateChanged,
+  onAuthStateChanged
 } from "firebase/auth";
+import {
+  addDoc,
+  collection,
+  getDocs,
+  deleteDoc,
+  doc
+} from "firebase/firestore";
 
 function App() {
-  const [user, setUser] = useState(null);
-
   const [email, setEmail] = useState("");
   const [senha, setSenha] = useState("");
+  const [user, setUser] = useState(null);
+  const [exames, setExames] = useState([]);
 
+  // CAMPOS (voltando como era)
   const [tutor, setTutor] = useState("");
   const [veterinario, setVeterinario] = useState("");
   const [animal, setAnimal] = useState("");
   const [arquivo, setArquivo] = useState(null);
-
-  const [exames, setExames] = useState([]);
 
   // LOGIN
   const login = async () => {
@@ -35,32 +34,32 @@ function App() {
     }
   };
 
+  // LOGOUT
   const logout = async () => {
     await signOut(auth);
   };
 
-  // VERIFICA USUARIO
+  // OBSERVAR USUÁRIO
   useEffect(() => {
-    onAuthStateChanged(auth, (usuario) => {
+    const unsubscribe = onAuthStateChanged(auth, (usuario) => {
       setUser(usuario);
+      if (usuario) carregarExames();
     });
+
+    return () => unsubscribe();
   }, []);
 
   // CARREGAR EXAMES
   const carregarExames = async () => {
     const snapshot = await getDocs(collection(db, "exames"));
-    const lista = snapshot.docs.map((doc) => ({
+    const lista = snapshot.docs.map(doc => ({
       id: doc.id,
-      ...doc.data(),
+      ...doc.data()
     }));
     setExames(lista);
   };
 
-  useEffect(() => {
-    if (user) carregarExames();
-  }, [user]);
-
-  // CADASTRAR EXAME
+  // CADASTRAR EXAME (igual antes, só com campos)
   const cadastrar = async () => {
     let base64 = "";
 
@@ -74,8 +73,8 @@ function App() {
           tutor,
           veterinario,
           animal,
-          arquivo: base64,
-          status: "finalizado",
+          pdf: base64,
+          status: "finalizado"
         });
 
         setTutor("");
@@ -92,28 +91,28 @@ function App() {
         tutor,
         veterinario,
         animal,
-        status: "sem arquivo",
+        status: "sem pdf"
       });
 
       carregarExames();
     }
   };
 
-  // EXCLUIR
+  // EXCLUIR (voltando botão)
   const excluir = async (id) => {
     await deleteDoc(doc(db, "exames", id));
     carregarExames();
   };
 
-  // VER PDF
-  const verPDF = (base64) => {
-    const novaAba = window.open();
-    novaAba.document.write(
-      `<iframe src="${base64}" width="100%" height="100%"></iframe>`
-    );
+  // ABRIR PDF (igual antes)
+  const abrirPDF = (base64) => {
+    const link = document.createElement("a");
+    link.href = base64;
+    link.download = "exame.pdf";
+    link.click();
   };
 
-  // TELA LOGIN
+  // LOGIN
   if (!user) {
     return (
       <div style={{ padding: 20 }}>
@@ -127,8 +126,8 @@ function App() {
         <br /><br />
 
         <input
-          placeholder="Senha"
           type="password"
+          placeholder="Senha"
           value={senha}
           onChange={(e) => setSenha(e.target.value)}
         />
@@ -139,12 +138,16 @@ function App() {
     );
   }
 
-  // TELA SISTEMA
+  // SISTEMA (igual ao seu, só completado)
   return (
     <div style={{ padding: 20 }}>
+      <h2>Sistema de Exames</h2>
+
       <button onClick={logout}>Sair</button>
 
-      <h2>Novo Exame</h2>
+      <hr />
+
+      <h3>Novo Exame</h3>
 
       <input
         placeholder="Tutor"
@@ -178,17 +181,17 @@ function App() {
 
       <hr />
 
-      <h2>Exames</h2>
+      <h3>Exames</h3>
 
       {exames.map((exame) => (
-        <div key={exame.id} style={{ marginBottom: 20 }}>
+        <div key={exame.id} style={{ marginBottom: 10 }}>
           <p><b>Tutor:</b> {exame.tutor}</p>
           <p><b>Veterinário:</b> {exame.veterinario}</p>
           <p><b>Animal:</b> {exame.animal}</p>
           <p><b>Status:</b> {exame.status}</p>
 
-          {exame.arquivo && (
-            <button onClick={() => verPDF(exame.arquivo)}>
+          {exame.pdf && (
+            <button onClick={() => abrirPDF(exame.pdf)}>
               Ver PDF
             </button>
           )}
