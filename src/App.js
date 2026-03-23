@@ -43,7 +43,7 @@ function App() {
 
 useEffect(() => {
   const unsubscribe = auth.onAuthStateChanged((user) => {
-    // alguma coisa
+    setUser(user); // 👈 ESSA LINHA FALTAVA
   });
 
   return () => unsubscribe();
