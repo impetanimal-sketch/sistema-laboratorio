@@ -1,20 +1,29 @@
-import { useEffect, useState } from "react";
-import { auth, db } from "./firebase";
+import { useState, useEffect } from "react";
+import { db, auth } from "./firebase";
+import {
+  collection,
+  addDoc,
+  getDocs,
+  deleteDoc,
+  doc,
+} from "firebase/firestore";
 import {
   signInWithEmailAndPassword,
   signOut,
-  onAuthStateChanged
+  onAuthStateChanged,
 } from "firebase/auth";
-import {
-  addDoc,
-  collection,
-  getDocs
-} from "firebase/firestore";
 
 function App() {
+  const [user, setUser] = useState(null);
+
   const [email, setEmail] = useState("");
   const [senha, setSenha] = useState("");
-  const [user, setUser] = useState(null);
+
+  const [tutor, setTutor] = useState("");
+  const [veterinario, setVeterinario] = useState("");
+  const [animal, setAnimal] = useState("");
+  const [arquivo, setArquivo] = useState(null);
+
   const [exames, setExames] = useState([]);
 
   // LOGIN
@@ -26,69 +35,82 @@ function App() {
     }
   };
 
-  // LOGOUT
   const logout = async () => {
     await signOut(auth);
   };
 
-  // OBSERVAR USUÁRIO LOGADO
+  // VERIFICA USUARIO
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (usuario) => {
+    onAuthStateChanged(auth, (usuario) => {
       setUser(usuario);
-      if (usuario) {
-        carregarExames();
-      }
     });
-
-    return () => unsubscribe();
   }, []);
 
   // CARREGAR EXAMES
   const carregarExames = async () => {
     const snapshot = await getDocs(collection(db, "exames"));
-    const lista = snapshot.docs.map(doc => ({
+    const lista = snapshot.docs.map((doc) => ({
       id: doc.id,
-      ...doc.data()
+      ...doc.data(),
     }));
     setExames(lista);
   };
 
-  // UPLOAD PDF (base64)
-  const handleFile = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
+  useEffect(() => {
+    if (user) carregarExames();
+  }, [user]);
 
-    const reader = new FileReader();
-    reader.readAsDataURL(file);
+  // CADASTRAR EXAME
+  const cadastrar = async () => {
+    let base64 = "";
 
-    reader.onload = () => {
-      const base64 = reader.result;
-      salvarNoFirestore(base64);
-    };
-  };
+    if (arquivo) {
+      const reader = new FileReader();
 
-  // SALVAR NO FIRESTORE
-  const salvarNoFirestore = async (base64) => {
-    try {
+      reader.onload = async () => {
+        base64 = reader.result;
+
+        await addDoc(collection(db, "exames"), {
+          tutor,
+          veterinario,
+          animal,
+          arquivo: base64,
+          status: "finalizado",
+        });
+
+        setTutor("");
+        setVeterinario("");
+        setAnimal("");
+        setArquivo(null);
+
+        carregarExames();
+      };
+
+      reader.readAsDataURL(arquivo);
+    } else {
       await addDoc(collection(db, "exames"), {
-        pdf: base64,
-        data: new Date()
+        tutor,
+        veterinario,
+        animal,
+        status: "sem arquivo",
       });
 
-      alert("PDF salvo com sucesso!");
       carregarExames();
-    } catch (err) {
-      console.error(err);
-      alert("Erro ao salvar PDF");
     }
   };
 
-  // ABRIR PDF
-  const abrirPDF = (base64) => {
-    const link = document.createElement("a");
-    link.href = base64;
-    link.download = "exame.pdf";
-    link.click();
+  // EXCLUIR
+  const excluir = async (id) => {
+    await deleteDoc(doc(db, "exames", id));
+    carregarExames();
+  };
+
+  // VER PDF
+  const verPDF = (base64) => {
+    const novaAba = window.open();
+    novaAba.document.write(
+      `<iframe src="${base64}" width="100%" height="100%"></iframe>`
+    );
   };
 
   // TELA LOGIN
@@ -105,8 +127,8 @@ function App() {
         <br /><br />
 
         <input
-          type="password"
           placeholder="Senha"
+          type="password"
           value={senha}
           onChange={(e) => setSenha(e.target.value)}
         />
@@ -117,27 +139,67 @@ function App() {
     );
   }
 
-  // TELA PRINCIPAL
+  // TELA SISTEMA
   return (
     <div style={{ padding: 20 }}>
-      <h2>Sistema de Exames</h2>
-
       <button onClick={logout}>Sair</button>
 
+      <h2>Novo Exame</h2>
+
+      <input
+        placeholder="Tutor"
+        value={tutor}
+        onChange={(e) => setTutor(e.target.value)}
+      />
+      <br /><br />
+
+      <input
+        placeholder="Veterinário"
+        value={veterinario}
+        onChange={(e) => setVeterinario(e.target.value)}
+      />
+      <br /><br />
+
+      <input
+        placeholder="Animal"
+        value={animal}
+        onChange={(e) => setAnimal(e.target.value)}
+      />
+      <br /><br />
+
+      <input
+        type="file"
+        accept="application/pdf"
+        onChange={(e) => setArquivo(e.target.files[0])}
+      />
+      <br /><br />
+
+      <button onClick={cadastrar}>Cadastrar</button>
+
       <hr />
 
-      <h3>Enviar PDF</h3>
-      <input type="file" accept="application/pdf" onChange={handleFile} />
-
-      <hr />
-
-      <h3>Exames</h3>
+      <h2>Exames</h2>
 
       {exames.map((exame) => (
-        <div key={exame.id} style={{ marginBottom: 10 }}>
-          <button onClick={() => abrirPDF(exame.pdf)}>
-            Ver PDF
+        <div key={exame.id} style={{ marginBottom: 20 }}>
+          <p><b>Tutor:</b> {exame.tutor}</p>
+          <p><b>Veterinário:</b> {exame.veterinario}</p>
+          <p><b>Animal:</b> {exame.animal}</p>
+          <p><b>Status:</b> {exame.status}</p>
+
+          {exame.arquivo && (
+            <button onClick={() => verPDF(exame.arquivo)}>
+              Ver PDF
+            </button>
+          )}
+
+          <br /><br />
+
+          <button onClick={() => excluir(exame.id)}>
+            Excluir
           </button>
+
+          <hr />
         </div>
       ))}
     </div>
