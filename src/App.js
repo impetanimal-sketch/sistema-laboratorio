@@ -81,17 +81,24 @@ useEffect(() => {
   };
 
   // 📎 upload PDF (simulado)
-  const uploadPDF = async (id, file) => {
-    if (!file) return;
+  import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { storage } from "./firebase";
 
-    const url = URL.createObjectURL(file);
+const uploadPDF = async (id, file) => {
+  if (!file) return;
 
-    await updateDoc(doc(db, "exames", id), {
-      pdf: url,
-    });
+  const storageRef = ref(storage, `exames/${id}.pdf`);
 
-    carregarExames();
-  };
+  await uploadBytes(storageRef, file);
+
+  const url = await getDownloadURL(storageRef);
+
+  await updateDoc(doc(db, "exames", id), {
+    pdf: url,
+  });
+
+  carregarExames();
+};
 
   // ✅ finalizar
   const finalizarExame = async (id, resultado, pdf) => {
