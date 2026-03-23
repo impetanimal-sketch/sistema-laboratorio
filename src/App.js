@@ -45,7 +45,7 @@ function App() {
     onAuthStateChanged(auth, (usuario) => {
       setUser(usuario);
     });
-  }, []);
+  }, [auth]);
 
   // 🔄 carregar exames
   const carregarExames = async () => {
