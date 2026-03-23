@@ -1,55 +1,50 @@
 import { useEffect, useState } from "react";
-import { auth, db } from "./firebase";
+import { db, auth } from "./firebase";
+import {
+  collection,
+  addDoc,
+  getDocs,
+  updateDoc,
+  doc
+} from "firebase/firestore";
 import {
   signInWithEmailAndPassword,
   signOut,
   onAuthStateChanged
 } from "firebase/auth";
-import {
-  addDoc,
-  collection,
-  getDocs,
-  deleteDoc,
-  doc
-} from "firebase/firestore";
 
 function App() {
+  const [user, setUser] = useState(null);
   const [email, setEmail] = useState("");
   const [senha, setSenha] = useState("");
-  const [user, setUser] = useState(null);
-  const [exames, setExames] = useState([]);
 
-  // CAMPOS (voltando como era)
   const [tutor, setTutor] = useState("");
   const [veterinario, setVeterinario] = useState("");
   const [animal, setAnimal] = useState("");
-  const [arquivo, setArquivo] = useState(null);
+
+  const [exames, setExames] = useState([]);
 
   // LOGIN
   const login = async () => {
     try {
       await signInWithEmailAndPassword(auth, email, senha);
-    } catch (err) {
+    } catch {
       alert("Erro no login");
     }
   };
 
-  // LOGOUT
   const logout = async () => {
     await signOut(auth);
   };
 
-  // OBSERVAR USUÁRIO
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (usuario) => {
-      setUser(usuario);
-      if (usuario) carregarExames();
+    onAuthStateChanged(auth, (user) => {
+      setUser(user);
+      if (user) carregarExames();
     });
-
-    return () => unsubscribe();
   }, []);
 
-  // CARREGAR EXAMES
+  // CARREGAR
   const carregarExames = async () => {
     const snapshot = await getDocs(collection(db, "exames"));
     const lista = snapshot.docs.map(doc => ({
@@ -59,57 +54,50 @@ function App() {
     setExames(lista);
   };
 
-  // CADASTRAR EXAME (igual antes, só com campos)
-  const cadastrar = async () => {
-    let base64 = "";
+  // CRIAR EXAME (RECEPÇÃO)
+  const criarExame = async () => {
+    await addDoc(collection(db, "exames"), {
+      tutor,
+      veterinario,
+      animal,
+      status: "aguardando",
+      pdf: ""
+    });
 
-    if (arquivo) {
-      const reader = new FileReader();
+    setTutor("");
+    setVeterinario("");
+    setAnimal("");
 
-      reader.onload = async () => {
-        base64 = reader.result;
-
-        await addDoc(collection(db, "exames"), {
-          tutor,
-          veterinario,
-          animal,
-          pdf: base64,
-          status: "finalizado"
-        });
-
-        setTutor("");
-        setVeterinario("");
-        setAnimal("");
-        setArquivo(null);
-
-        carregarExames();
-      };
-
-      reader.readAsDataURL(arquivo);
-    } else {
-      await addDoc(collection(db, "exames"), {
-        tutor,
-        veterinario,
-        animal,
-        status: "sem pdf"
-      });
-
-      carregarExames();
-    }
-  };
-
-  // EXCLUIR (voltando botão)
-  const excluir = async (id) => {
-    await deleteDoc(doc(db, "exames", id));
     carregarExames();
   };
 
-  // ABRIR PDF (igual antes)
-  const abrirPDF = (base64) => {
-    const link = document.createElement("a");
-    link.href = base64;
-    link.download = "exame.pdf";
-    link.click();
+  // LABORATÓRIO (ANEXAR PDF)
+  const uploadPDF = async (id, file) => {
+    if (!file) return;
+
+    const url = URL.createObjectURL(file);
+
+    await updateDoc(doc(db, "exames", id), {
+      pdf: url
+    });
+
+    carregarExames();
+  };
+
+  // FINALIZAR
+  const finalizar = async (id) => {
+    await updateDoc(doc(db, "exames", id), {
+      status: "finalizado"
+    });
+
+    carregarExames();
+  };
+
+  // WHATSAPP
+  const enviarWhats = (exame) => {
+    const mensagem = `Exame pronto\nTutor: ${exame.tutor}\nLink: ${exame.pdf}`;
+    const url = `https://wa.me/?text=${encodeURIComponent(mensagem)}`;
+    window.open(url, "_blank");
   };
 
   // LOGIN
@@ -117,89 +105,51 @@ function App() {
     return (
       <div style={{ padding: 20 }}>
         <h2>Login</h2>
-
-        <input
-          placeholder="Email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-        />
+        <input placeholder="Email" onChange={e => setEmail(e.target.value)} />
         <br /><br />
-
-        <input
-          type="password"
-          placeholder="Senha"
-          value={senha}
-          onChange={(e) => setSenha(e.target.value)}
-        />
+        <input type="password" placeholder="Senha" onChange={e => setSenha(e.target.value)} />
         <br /><br />
-
         <button onClick={login}>Entrar</button>
       </div>
     );
   }
 
-  // SISTEMA (igual ao seu, só completado)
   return (
     <div style={{ padding: 20 }}>
-      <h2>Sistema de Exames</h2>
-
       <button onClick={logout}>Sair</button>
 
-      <hr />
+      <h2>Recepção</h2>
 
-      <h3>Novo Exame</h3>
-
-      <input
-        placeholder="Tutor"
-        value={tutor}
-        onChange={(e) => setTutor(e.target.value)}
-      />
+      <input placeholder="Tutor" value={tutor} onChange={e => setTutor(e.target.value)} />
+      <br /><br />
+      <input placeholder="Veterinário" value={veterinario} onChange={e => setVeterinario(e.target.value)} />
+      <br /><br />
+      <input placeholder="Animal" value={animal} onChange={e => setAnimal(e.target.value)} />
       <br /><br />
 
-      <input
-        placeholder="Veterinário"
-        value={veterinario}
-        onChange={(e) => setVeterinario(e.target.value)}
-      />
-      <br /><br />
-
-      <input
-        placeholder="Animal"
-        value={animal}
-        onChange={(e) => setAnimal(e.target.value)}
-      />
-      <br /><br />
-
-      <input
-        type="file"
-        accept="application/pdf"
-        onChange={(e) => setArquivo(e.target.files[0])}
-      />
-      <br /><br />
-
-      <button onClick={cadastrar}>Cadastrar</button>
+      <button onClick={criarExame}>Cadastrar</button>
 
       <hr />
 
-      <h3>Exames</h3>
+      <h2>Exames</h2>
 
       {exames.map((exame) => (
-        <div key={exame.id} style={{ marginBottom: 10 }}>
+        <div key={exame.id}>
           <p><b>Tutor:</b> {exame.tutor}</p>
           <p><b>Veterinário:</b> {exame.veterinario}</p>
           <p><b>Animal:</b> {exame.animal}</p>
           <p><b>Status:</b> {exame.status}</p>
 
-          {exame.pdf && (
-            <button onClick={() => abrirPDF(exame.pdf)}>
-              Ver PDF
-            </button>
-          )}
+          <input type="file" onChange={(e) => uploadPDF(exame.id, e.target.files[0])} />
 
           <br /><br />
 
-          <button onClick={() => excluir(exame.id)}>
-            Excluir
+          <button onClick={() => finalizar(exame.id)}>
+            Finalizar
+          </button>
+
+          <button onClick={() => enviarWhats(exame)}>
+            WhatsApp
           </button>
 
           <hr />
