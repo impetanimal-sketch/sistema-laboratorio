@@ -1,23 +1,34 @@
-import { useEffect, useState } from "react";
-import { auth, db } from "./firebase";
+import { useState, useEffect } from "react";
+import { db } from "./firebase";
 import {
-  signInWithEmailAndPassword,
-  signOut,
-  onAuthStateChanged
-} from "firebase/auth";
-import {
-  addDoc,
   collection,
-  getDocs
+  addDoc,
+  getDocs,
+  updateDoc,
+  doc,
+  deleteDoc,
 } from "firebase/firestore";
 
+import {
+  getAuth,
+  signInWithEmailAndPassword,
+  signOut,
+  onAuthStateChanged,
+} from "firebase/auth";
+
 function App() {
+  const [exames, setExames] = useState([]);
+  const [animal, setAnimal] = useState("");
+  const [tutor, setTutor] = useState("");
+  const [veterinario, setVeterinario] = useState("");
+
   const [email, setEmail] = useState("");
   const [senha, setSenha] = useState("");
   const [user, setUser] = useState(null);
-  const [exames, setExames] = useState([]);
 
-  // LOGIN
+  const auth = getAuth();
+
+  // 🔐 LOGIN
   const login = async () => {
     try {
       await signInWithEmailAndPassword(auth, email, senha);
@@ -26,72 +37,91 @@ function App() {
     }
   };
 
-  // LOGOUT
   const logout = async () => {
     await signOut(auth);
   };
 
-  // OBSERVAR USUÁRIO LOGADO
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (usuario) => {
-      setUser(usuario);
-      if (usuario) {
-        carregarExames();
-      }
-    });
+useEffect(() => {
+  const unsubscribe = auth.onAuthStateChanged((user) => {
+    setUser(user); // 👈 ESSA LINHA FALTAVA
+  });
 
-    return () => unsubscribe();
-  }, []);
+  return () => unsubscribe();
+}, [auth]);
 
-  // CARREGAR EXAMES
+  // 🔄 carregar exames
   const carregarExames = async () => {
     const snapshot = await getDocs(collection(db, "exames"));
-    const lista = snapshot.docs.map(doc => ({
+    const lista = snapshot.docs.map((doc) => ({
       id: doc.id,
-      ...doc.data()
+      ...doc.data(),
     }));
     setExames(lista);
   };
 
-  // UPLOAD PDF (base64)
-  const handleFile = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
+  useEffect(() => {
+    if (user) carregarExames();
+  }, [user]);
 
-    const reader = new FileReader();
-    reader.readAsDataURL(file);
+  // ➕ criar exame
+  const criarExame = async () => {
+    await addDoc(collection(db, "exames"), {
+      animal,
+      tutor,
+      veterinario,
+      status: "em_analise",
+      resultado: "",
+      pdf: "",
+    });
 
-    reader.onload = () => {
-      const base64 = reader.result;
-      salvarNoFirestore(base64);
-    };
+    setAnimal("");
+    setTutor("");
+    setVeterinario("");
+    carregarExames();
   };
 
-  // SALVAR NO FIRESTORE
-  const salvarNoFirestore = async (base64) => {
-    try {
-      await addDoc(collection(db, "exames"), {
-        pdf: base64,
-        data: new Date()
-      });
+  // 📎 upload PDF (simulado)
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { storage } from "./firebase";
 
-      alert("PDF salvo com sucesso!");
-      carregarExames();
-    } catch (err) {
-      console.error(err);
-      alert("Erro ao salvar PDF");
+const uploadPDF = async (id, file) => {
+  if (!file) return;
+
+  const storageRef = ref(storage, `exames/${id}.pdf`);
+
+  await uploadBytes(storageRef, file);
+
+  const url = await getDownloadURL(storageRef);
+
+  await updateDoc(doc(db, "exames", id), {
+    pdf: url,
+  });
+
+  carregarExames();
+};
+
+  // ✅ finalizar
+  const finalizarExame = async (id, resultado, pdf) => {
+    if (!pdf) {
+      alert("Envie o PDF antes!");
+      return;
     }
+
+    await updateDoc(doc(db, "exames", id), {
+      status: "finalizado",
+      resultado,
+    });
+
+    carregarExames();
   };
 
-  // ABRIR PDF
-  const abrirPDF = (base64) => {
-    const link = document.createElement("a");
-    link.href = base64;
-    link.download = "exame.pdf";
-    link.click();
+  // ❌ excluir
+  const excluirExame = async (id) => {
+    await deleteDoc(doc(db, "exames", id));
+    carregarExames();
   };
 
-  // TELA LOGIN
+  // 🔐 TELA LOGIN
   if (!user) {
     return (
       <div style={{ padding: 20 }}>
@@ -99,47 +129,150 @@ function App() {
 
         <input
           placeholder="Email"
-          value={email}
           onChange={(e) => setEmail(e.target.value)}
         />
-        <br /><br />
-
+        <br />
         <input
           type="password"
           placeholder="Senha"
-          value={senha}
           onChange={(e) => setSenha(e.target.value)}
         />
-        <br /><br />
-
+        <br />
         <button onClick={login}>Entrar</button>
       </div>
     );
   }
 
-  // TELA PRINCIPAL
   return (
-    <div style={{ padding: 20 }}>
-      <h2>Sistema de Exames</h2>
+    <div className="container">
+      <h1>Sistema de Exames</h1>
 
       <button onClick={logout}>Sair</button>
 
       <hr />
 
-      <h3>Enviar PDF</h3>
-      <input type="file" accept="application/pdf" onChange={handleFile} />
+      {/* LAB */}
+      {user.email.includes("laboratorio") && (
+        <>
+          <h2>Cadastrar Exame</h2>
+
+          <input
+            placeholder="Animal"
+            value={animal}
+            onChange={(e) => setAnimal(e.target.value)}
+          />
+          <br />
+          <input
+            placeholder="Tutor"
+            value={tutor}
+            onChange={(e) => setTutor(e.target.value)}
+          />
+          <br />
+          <input
+            placeholder="Veterinário"
+            value={veterinario}
+            onChange={(e) => setVeterinario(e.target.value)}
+          />
+          <br />
+          <button onClick={criarExame}>Cadastrar</button>
+        </>
+      )}
 
       <hr />
 
-      <h3>Exames</h3>
+      <h2>Exames</h2>
 
-      {exames.map((exame) => (
-        <div key={exame.id} style={{ marginBottom: 10 }}>
-          <button onClick={() => abrirPDF(exame.pdf)}>
-            Ver PDF
-          </button>
-        </div>
-      ))}
+      {exames.map((exame) => {
+        let resultadoTemp = exame.resultado || "";
+
+        return (
+          <div key={exame.id} className="card">
+            <p><b>Animal:</b> {exame.animal}</p>
+            <p><b>Tutor:</b> {exame.tutor}</p>
+            <p><b>Veterinário:</b> {exame.veterinario}</p>
+            <p><b>Status:</b> {exame.status}</p>
+
+            {/* LAB */}
+            {user.email.includes("laboratorio") && (
+              <>
+                <textarea
+                  defaultValue={exame.resultado}
+                  onChange={(e) => (resultadoTemp = e.target.value)}
+                />
+
+                <br />
+
+                <input
+                  type="file"
+                  onChange={(e) =>
+                    uploadPDF(exame.id, e.target.files[0])
+                  }
+                />
+
+                <br /><br />
+
+                <button
+                  onClick={() =>
+                    finalizarExame(exame.id, resultadoTemp, exame.pdf)
+                  }
+                >
+                  Finalizar
+                </button>
+
+                <br /><br />
+
+                <button
+                  style={{ background: "red", color: "white" }}
+                  onClick={() => excluirExame(exame.id)}
+                >
+                  Excluir
+                </button>
+              </>
+            )}
+
+            {/* RECEPÇÃO */}
+            {user.email.includes("recepcao") &&
+              exame.status === "finalizado" && (
+                <>
+                  {exame.pdf ? (
+                    <>
+                      <a href={exame.pdf} target="_blank" rel="noreferrer">
+                        📄 Abrir PDF
+                      </a>
+
+                      <br /><br />
+
+                      <a
+                        href={`https://wa.me/?text=${encodeURIComponent(
+                          `Olá ${exame.tutor}, seu exame de ${exame.animal} está pronto: ${exame.pdf}`
+                        )}`}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        📲 WhatsApp
+                      </a>
+                    </>
+                  ) : (
+                    <p>⚠️ Sem PDF</p>
+                  )}
+                </>
+              )}
+
+            {/* VET */}
+            {user.email.includes("vet") && (
+              <>
+                <p><b>Resultado:</b> {exame.resultado}</p>
+
+                {exame.pdf && (
+                  <a href={exame.pdf} target="_blank" rel="noreferrer">
+                    📄 Ver PDF
+                  </a>
+                )}
+              </>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
