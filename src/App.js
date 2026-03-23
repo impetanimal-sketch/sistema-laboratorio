@@ -41,11 +41,11 @@ function App() {
     await signOut(auth);
   };
 
-  useEffect(() => {
-    onAuthStateChanged(auth, (usuario) => {
-      setUser(usuario);
-    });
-  }, [auth]);
+useEffect(() => {
+  auth.onAuthStateChanged((user) => {
+    // alguma coisa
+  });
+}, [auth]);
 
   // 🔄 carregar exames
   const carregarExames = async () => {
