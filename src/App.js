@@ -6,40 +6,38 @@ import {
   onAuthStateChanged
 } from "firebase/auth";
 import {
-  collection,
   addDoc,
-  getDocs,
-  doc,
-  updateDoc
+  collection,
+  getDocs
 } from "firebase/firestore";
 
 function App() {
-  const [user, setUser] = useState(null);
   const [email, setEmail] = useState("");
   const [senha, setSenha] = useState("");
+  const [user, setUser] = useState(null);
   const [exames, setExames] = useState([]);
-
-  const [tutor, setTutor] = useState("");
-  const [veterinario, setVeterinario] = useState("");
 
   // LOGIN
   const login = async () => {
     try {
       await signInWithEmailAndPassword(auth, email, senha);
     } catch (err) {
-      alert(err.message);
+      alert("Erro no login");
     }
   };
 
+  // LOGOUT
   const logout = async () => {
     await signOut(auth);
   };
 
-  // OBSERVA LOGIN
+  // OBSERVAR USUÁRIO LOGADO
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (usuario) => {
       setUser(usuario);
-      if (usuario) carregarExames();
+      if (usuario) {
+        carregarExames();
+      }
     });
 
     return () => unsubscribe();
@@ -48,65 +46,52 @@ function App() {
   // CARREGAR EXAMES
   const carregarExames = async () => {
     const snapshot = await getDocs(collection(db, "exames"));
-    const lista = snapshot.docs.map((doc) => ({
+    const lista = snapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data()
     }));
     setExames(lista);
   };
 
-  // CRIAR EXAME
-  const criarExame = async () => {
-    if (!tutor || !veterinario) {
-      alert("Preencha tudo");
-      return;
-    }
-
-    await addDoc(collection(db, "exames"), {
-      tutor,
-      veterinario,
-      status: "aguardando",
-      pdf: ""
-    });
-
-    setTutor("");
-    setVeterinario("");
-    carregarExames();
-  };
-
-  // UPLOAD PDF (BASE64)
-  const uploadPDF = async (id, file) => {
+  // UPLOAD PDF (base64)
+  const handleFile = (e) => {
+    const file = e.target.files[0];
     if (!file) return;
 
     const reader = new FileReader();
     reader.readAsDataURL(file);
 
-    reader.onload = async () => {
+    reader.onload = () => {
       const base64 = reader.result;
+      salvarNoFirestore(base64);
+    };
+  };
 
-      await updateDoc(doc(db, "exames", id), {
+  // SALVAR NO FIRESTORE
+  const salvarNoFirestore = async (base64) => {
+    try {
+      await addDoc(collection(db, "exames"), {
         pdf: base64,
-        status: "finalizado"
+        data: new Date()
       });
 
+      alert("PDF salvo com sucesso!");
       carregarExames();
-    };
+    } catch (err) {
+      console.error(err);
+      alert("Erro ao salvar PDF");
+    }
   };
 
   // ABRIR PDF
   const abrirPDF = (base64) => {
-    if (!base64) {
-      alert("Sem PDF");
-      return;
-    }
-
     const link = document.createElement("a");
     link.href = base64;
     link.download = "exame.pdf";
     link.click();
   };
 
-  // LOGIN TELA
+  // TELA LOGIN
   if (!user) {
     return (
       <div style={{ padding: 20 }}>
@@ -132,58 +117,27 @@ function App() {
     );
   }
 
-  // SISTEMA
+  // TELA PRINCIPAL
   return (
     <div style={{ padding: 20 }}>
-      <h2>Sistema Laboratório</h2>
+      <h2>Sistema de Exames</h2>
 
       <button onClick={logout}>Sair</button>
 
       <hr />
 
-      <h3>Novo Exame</h3>
-
-      <input
-        placeholder="Tutor"
-        value={tutor}
-        onChange={(e) => setTutor(e.target.value)}
-      />
-      <br /><br />
-
-      <input
-        placeholder="Veterinário"
-        value={veterinario}
-        onChange={(e) => setVeterinario(e.target.value)}
-      />
-      <br /><br />
-
-      <button onClick={criarExame}>Cadastrar</button>
+      <h3>Enviar PDF</h3>
+      <input type="file" accept="application/pdf" onChange={handleFile} />
 
       <hr />
 
       <h3>Exames</h3>
 
       {exames.map((exame) => (
-        <div key={exame.id} style={{ marginBottom: 15 }}>
-          <p><b>Tutor:</b> {exame.tutor}</p>
-          <p><b>Veterinário:</b> {exame.veterinario}</p>
-          <p><b>Status:</b> {exame.status}</p>
-
-          <input
-            type="file"
-            accept="application/pdf"
-            onChange={(e) =>
-              uploadPDF(exame.id, e.target.files[0])
-            }
-          />
-
-          <br /><br />
-
+        <div key={exame.id} style={{ marginBottom: 10 }}>
           <button onClick={() => abrirPDF(exame.pdf)}>
             Ver PDF
           </button>
-
-          <hr />
         </div>
       ))}
     </div>
